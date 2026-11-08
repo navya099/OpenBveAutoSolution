@@ -1,10 +1,11 @@
 # bveauto/steps/info.py
 from ..context import BuildContext
 from ..core.alignment.curve.loader import load_curve_data
+from ..core.alignment.profile.loader import load_pitch_data
 from ..decorators import log_errors
 from ..steps.base import Step
 
-from 랜덤전주위치생성 import load_pitch_data, load_coordinates
+from 랜덤전주위치생성 import load_coordinates
 from 교량터널구문생성기 import load_structure_data
 
 
@@ -17,7 +18,7 @@ class InfoStep(Step):
         log(f"설계속도={ctx.designspeed}km/h, 선로구분={ctx.alignment_type}, 선로수={ctx.linecount}")
 
         ctx.curve_info = load_curve_data() or None
-        ctx.pitch_info = load_pitch_data() or []
+        ctx.pitch_info = load_pitch_data() or None
         ctx.bve_coord = load_coordinates() or []
         ctx.structure_list = load_structure_data() or []
 
