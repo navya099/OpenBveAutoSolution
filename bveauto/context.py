@@ -3,7 +3,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import PathConfig, DEFAULT_PATHS, RAILTYPE_MAP
+from .core.alignment.coord.coorddata import CoordCollection
 from .core.alignment.curve.curvedata import CurveCollection
+from .core.alignment.profile.profiledata import ProfileCollection
 
 
 @dataclass
@@ -18,9 +20,9 @@ class BuildContext:
 
     # load_info 이후 채워지는 데이터
     curve_info: CurveCollection = field(default_factory=CurveCollection)
-    pitch_info: list = field(default_factory=list)
+    pitch_info: ProfileCollection = field(default_factory=ProfileCollection)
     structure_list: list = field(default_factory=list)
-    bve_coord: list = field(default_factory=list)
+    bve_coord: CoordCollection = field(default_factory=CoordCollection)
     start_block: float = 0.0
     last_block: float = 0.0
 
