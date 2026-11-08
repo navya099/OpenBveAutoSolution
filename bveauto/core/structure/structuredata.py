@@ -93,7 +93,7 @@ class StructureCollection:
         return [
             s
             for s in self.structures
-            if s.type == type_
+            if s.structure_type == type_
         ]
 
     def is_bridge(
@@ -107,7 +107,7 @@ class StructureCollection:
 
         return (
                 structure is not None
-                and structure.type == StructureType.BRIDGE
+                and structure.structure_type == StructureType.BRIDGE
         )
 
     def is_tunnel(
@@ -119,7 +119,7 @@ class StructureCollection:
 
         return (
                 structure is not None
-                and structure.type == StructureType.TUNNEL
+                and structure.structure_type == StructureType.TUNNEL
         )
 
     def total_bridge_count(self) -> int:
