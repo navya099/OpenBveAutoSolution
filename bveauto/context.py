@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import PathConfig, DEFAULT_PATHS, RAILTYPE_MAP
+from .core.alignment.curve.curvedata import CurveCollection
 
 
 @dataclass
@@ -16,7 +17,7 @@ class BuildContext:
     paths: PathConfig = field(default_factory=lambda: DEFAULT_PATHS)
 
     # load_info 이후 채워지는 데이터
-    curve_info: list = field(default_factory=list)
+    curve_info: CurveCollection = field(default_factory=CurveCollection)
     pitch_info: list = field(default_factory=list)
     structure_list: list = field(default_factory=list)
     bve_coord: list = field(default_factory=list)
