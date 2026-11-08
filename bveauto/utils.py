@@ -1,8 +1,6 @@
 # bveauto/utils.py
 from pathlib import Path
 
-from file_io_utils import copy_files, copy_all_files
-
 
 def copy_post_assets(ctx, work: Path, source: Path, target: Path,
                      index_names: list[str]):

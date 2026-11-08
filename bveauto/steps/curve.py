@@ -3,11 +3,6 @@ from ..context import BuildContext
 from ..decorators import log_errors
 from ..steps.base import Step
 
-from bve곡선레일구문생성기 import (
-    preprocess_input_index, extract_cant, cal_mainlogic,
-    create_freeobj, save_files, create_railtype, save_railtype,
-)
-
 
 class CurveStep(Step):
     name = "#2. 곡선레일"

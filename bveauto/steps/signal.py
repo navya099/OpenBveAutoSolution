@@ -5,9 +5,6 @@ from ..context import BuildContext
 from ..decorators import log_errors
 from ..steps.base import Step
 
-from 랜덤전주위치생성 import distribute_pole_spacing_flexible
-from 랜덤신호위치생성 import save_signal_data
-
 
 class SignalStep(Step):
     name = "#4. 신호"
