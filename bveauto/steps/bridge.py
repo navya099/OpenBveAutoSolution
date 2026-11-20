@@ -1,7 +1,9 @@
 # bveauto/steps/bridge.py
 from ..context import BuildContext
+from ..core.structure.bve_synctax_builder import create_network_data
 from ..decorators import log_errors
 from ..steps.base import Step
+from ..utils import create_txt
 
 
 class BridgeStep(Step):

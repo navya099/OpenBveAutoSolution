@@ -26,7 +26,7 @@ class InfoStep(Step):
         if not ctx.structure_list:
             raise RuntimeError("구조물 정보 로드 실패")
 
-        ctx.start_block = ctx.curve_info[0][0]
-        ctx.last_block = ctx.curve_info[-1][0]
+        ctx.start_block = ctx.curve_info.curves[0].station
+        ctx.last_block = ctx.curve_info.curves[-1].station
         log(f"시작 측점: {ctx.start_block}, 끝 측점: {ctx.last_block}")
         log(f"파정: {ctx.brokenchain}, freeobj offset: {ctx.offset}")
