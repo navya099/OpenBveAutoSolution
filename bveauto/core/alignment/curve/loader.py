@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from tkinter import filedialog
 
 import pandas as pd
@@ -18,19 +19,26 @@ def read_file() -> str | None:
     return file_path
 
 
-def load_curve_data() -> CurveCollection | None:
-    file_path = read_file()
-    if not file_path:
-        logger.error('read_file is empty')
-        raise ValueError('입력 데이터가 비어있습니다.')
-    try:
-        # 텍스트 파일(.txt) 읽기
-        df_curve = pd.read_csv(file_path, sep=",", header=None, names=['sta', 'radius', 'cant'])
+def load_curve_data(base_dir: str | Path | None = None) -> CurveCollection | None:
+    if base_dir is not None:
+        target = Path(base_dir) / "curve_info.txt"
+        if not target.is_file():
+            logger.error(f"파일을 찾을 수 없습니다: {target}")
+            raise FileNotFoundError(f"곡선 파일이 존재하지 않습니다: {target}")
+        file_path = str(target)
+    else:
+        file_path = read_file()
 
-        # 곡선 구간 정보 저장
+    if not file_path:
+        logger.error("read_file is empty")
+        raise ValueError("입력 데이터가 비어있습니다.")
+
+    try:
+        df_curve = pd.read_csv(file_path, sep=",", header=None, names=["sta", "radius", "cant"])
+
         cs = CurveCollection()
         for _, row in df_curve.iterrows():
-            radius_raw = float(row['radius'])
+            radius_raw = float(row["radius"])
 
             if radius_raw > 0:
                 direction = CurveDirection.LEFT
@@ -40,14 +48,15 @@ def load_curve_data() -> CurveCollection | None:
                 direction = CurveDirection.TANGENT
 
             cd = CurveData(
-                station=float(row['sta']),
+                station=float(row["sta"]),
                 radius=abs(radius_raw),
-                cant=float(row['cant']),
-                direction=direction
+                cant=float(row["cant"]),
+                direction=direction,
             )
             cs.add(cd)
     except Exception:
-        logger.exception('곡선데이터 생성중 예외가 발생했습니다.')
+        logger.exception("곡선데이터 생성중 예외가 발생했습니다.")
         return None
+
     cs.sort()
     return cs

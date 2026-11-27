@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from tkinter import filedialog
 
 from bveauto.core.alignment.coord.coorddata import CoordData, CoordCollection
@@ -16,11 +17,19 @@ def read_file() -> str | None:
     return file_path
 
 
-def load_coord_data() -> CoordCollection | None:
-    file_path = read_file()
+def load_coord_data(base_dir: str | Path | None = None) -> CoordCollection | None:
+    if base_dir is not None:
+        target = Path(base_dir) / "bve_coordinates.txt"
+        if not target.is_file():
+            logger.error(f"파일을 찾을 수 없습니다: {target}")
+            raise FileNotFoundError(f"좌표 파일이 존재하지 않습니다: {target}")
+        file_path = str(target)
+    else:
+        file_path = read_file()
+
     if not file_path:
-        logger.error('read_file is empty')
-        return None
+        logger.error("read_file is empty")
+        raise ValueError("입력 데이터가 비어있습니다.")
     try:
         cs = CoordCollection()
 

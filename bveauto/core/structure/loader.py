@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from tkinter import filedialog
 
 from bveauto.core.structure.structuredata import StructureCollection, StructureData, StructureType
@@ -91,12 +92,23 @@ def load_structure_sheet(
             )
         )
 
-def load_structure_data() -> StructureCollection | None:
+def load_structure_data(base_dir: str | Path | None = None) -> StructureCollection | None:
     """xlsx 파일을 읽고 교량과 터널 정보를 반환하는 함수"""
-    file_path = read_file()
+    if base_dir is not None:
+        xlsx_files = [
+            f for f in sorted(Path(base_dir).glob("*.xlsx"))
+            if not f.name.startswith("~$")
+        ]
+        if not xlsx_files:
+            logger.error(f"폴더에서 xlsx 파일을 찾을 수 없습니다: {base_dir}")
+            raise FileNotFoundError(f"구조물 파일(*.xlsx)이 존재하지 않습니다: {base_dir}")
+        file_path = str(xlsx_files[0])
+    else:
+        file_path = read_file()
+
     if not file_path:
-        logger.error('read_file is empty')
-        return None
+        logger.error("read_file is empty")
+        raise ValueError("입력 데이터가 비어있습니다.")
     try:
     # xlsx 파일 읽기
         import pandas as pd

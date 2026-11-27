@@ -16,10 +16,11 @@ class InfoStep(Step):
     def execute(self, ctx: BuildContext, log):
         log(f"설계속도={ctx.designspeed}km/h, 선로구분={ctx.alignment_type}, 선로수={ctx.linecount}")
 
-        ctx.curve_info = load_curve_data() or None
-        ctx.pitch_info = load_pitch_data() or None
-        ctx.bve_coord = load_coord_data() or None
-        ctx.structure_list = load_structure_data() or None
+        base_dir = ctx.paths.base_source
+        ctx.curve_info = load_curve_data(base_dir) or None
+        ctx.pitch_info = load_pitch_data(base_dir) or None
+        ctx.bve_coord = load_coord_data(base_dir) or None
+        ctx.structure_list = load_structure_data(base_dir) or None
 
         if not ctx.curve_info:
             raise RuntimeError("곡선 정보 로드 실패")

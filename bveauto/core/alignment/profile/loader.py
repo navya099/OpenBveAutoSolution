@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 from tkinter import filedialog
 
 import pandas as pd
@@ -20,11 +21,19 @@ def read_file() -> str | None:
 
 
 
-def load_pitch_data() -> ProfileCollection | None:
-    file_path = read_file()
+def load_pitch_data(base_dir: str | Path | None = None) -> ProfileCollection | None:
+    if base_dir is not None:
+        target = Path(base_dir) / "pitch_info.txt"
+        if not target.is_file():
+            logger.error(f"파일을 찾을 수 없습니다: {target}")
+            raise FileNotFoundError(f"구배 파일이 존재하지 않습니다: {target}")
+        file_path = str(target)
+    else:
+        file_path = read_file()
+
     if not file_path:
-        logger.error('read_file is empty')
-        raise ValueError('입력 데이터가 비어있습니다.')
+        logger.error("read_file is empty")
+        raise ValueError("입력 데이터가 비어있습니다.")
     try:
         # 텍스트 파일(.txt) 읽기
         df_grade = pd.read_csv(file_path, sep=",", header=None, names=['sta', 'grade'])
