@@ -1,80 +1,66 @@
-# bveauto/steps/post.py
 from ..context import BuildContext
 from ..decorators import log_errors
 from ..steps.base import Step
-from ..utils import copy_post_assets
+from ..xref.post.controller.mainrunner import MainRunner
+from ..xref.post.controller.state import AppState
+
+POST_TYPES = ("거리표", "곡선표", "기울기표")
+
+# 구조물별 선로제표 기본 배치 오프셋 (x절댓값, y높이)
+DEFAULT_POST_OFFSET = {
+    "토공": (3.0, 0.0),
+    "교량": (3.0, 0.0),
+    "터널": (2.5, 1.5),
+}
+
 
 class PostStep(Step):
-    """km/curve/pitch 3종 포스트를 순차 생성. 각각 개별 Step으로 쪼개도 됨."""
     name = "#6. 선로제표"
 
     @log_errors("#6. 선로제표")
-    def execute(self, ctx: BuildContext, log):
-        self._km(ctx, log)
-        self._curve(ctx, log)
-        self._pitch(ctx, log)
-        log("구조물표는 미구현 상태입니다.")
+    def execute(self, ctx: BuildContext, log) -> None:
+        base_dir = ctx.paths.base_source
+        xlsx_files = [f for f in sorted(base_dir.glob("*.xlsx")) if not f.name.startswith("~$")]
 
-    # ---------- 거리표 ----------
-    def _km(self, ctx: BuildContext, log):
-        work = ctx.paths.ensure(ctx.paths.work('km_post'))
-        target = ctx.paths.target('km_post')
-        source = ctx.paths.source('km_post', ctx.alignment_type)
+        state = AppState()
+        state.start_station = ctx.start_block
+        state.end_station = ctx.last_block
+        state.brokenchain = ctx.brokenchain
+        state.isbrokenchain = ctx.brokenchain != 0.0
+        state.alignment_type = ctx.alignment_type
 
-        intervel = 100 if ctx.alignment_type == '도시철도' else 200
-        index_datas, post_datas = create_km_object(
-            ctx.start_block, ctx.last_block, ctx.structure_list,
-            intervel, ctx.alignment_type, source, work, target, ctx.offset,
-        )
-        create_txt(work / 'km_index.txt', index_datas)
-        create_txt(work / 'km_post.txt', post_datas)
+        state.base_source_directory = str(base_dir)
+        state.structure_excel_path = str(xlsx_files[0]) if xlsx_files else ""
+        # 선로제표는 CSV/PNG 오브젝트 파일과 txt 구문을 함께 생성하므로 obj 또는 route 경로 지정
+        state.target_directory = str(ctx.paths.obj)
+        state.work_directory = str(ctx.paths.obj)
+        state.offset = DEFAULT_POST_OFFSET.copy()
 
-        copy_post_assets(ctx, work, source, target,
-                         ['km_index.txt', 'km_post.txt'])
-        log("거리표 생성 완료")
+        # 트랙 모드 및 방향/인덱스 설정
+        if ctx.linecount >= 2:
+            state.track_mode = "double"
+            state.track_distance = ctx.offset if ctx.offset > 0 else 4.3
+            state.track_direction = {"main": -1, "sub": 1}
+            state.track_index = {"main": 0, "sub": 1}
+        else:
+            state.track_mode = "single"
+            state.track_distance = 0.0
+            state.track_direction = {"main": -1}
+            state.track_index = {"main": 0}
 
-    # ---------- 곡선표 ----------
-    def _curve(self, ctx: BuildContext, log):
-        work = ctx.paths.ensure(ctx.paths.work('curve'))
-        target = ctx.paths.target('curve_post')
-        source = ctx.paths.source('curve', ctx.alignment_type)
+        info_file_map = {
+            "거리표": str(base_dir / "curve_info.txt"),
+            "곡선표": str(base_dir / "curve_info.txt"),
+            "기울기표": str(base_dir / "pitch_info.txt"),
+        }
 
-        objectdatas = process_curve_data(
-            source, work, target, ctx.curve_info, ctx.structure_list,
-            ctx.brokenchain, ctx.alignment_type, 'BVE', ctx.offset,
-        )
-        if not objectdatas:
-            log("곡선표: 생성된 객체 없음 → 건너뜀")
-            return
-
-        create_curve_post_txt(objectdatas, work / 'curve_post.txt')
-        create_curve_index_txt(objectdatas, work / 'curve_index.txt')
-        create_speed_limit(objectdatas, work)
-
-        copy_post_assets(ctx, work, source, target,
-                         ['curve_index.txt', 'curve_post.txt'])
-        log("곡선표 생성 완료")
-
-    # ---------- 기울기표 ----------
-    def _pitch(self, ctx: BuildContext, log):
-        work = ctx.paths.ensure(ctx.paths.work('pitch'))
-        target = ctx.paths.target('pitch_post')
-        source = ctx.paths.source('pitch', ctx.alignment_type)
-
-        vipdatas = process_and_save_sections(
-            ctx.pitch_info, ctx.brokenchain, 'BVE', ctx.pitch_info,
-        )
-        objectdatas = process_bve_profile(
-            vipdatas, ctx.structure_list, source, work, target,
-            ctx.alignment_type, offset=ctx.offset,
-        )
-        if not objectdatas:
-            log("기울기표: 생성된 객체 없음 → 건너뜀")
-            return
-
-        create_pitch_post_txt(objectdatas, work / 'pitch_post.txt')
-        create_pitch_index_txt(objectdatas, work / 'pitch_index.txt')
-
-        copy_post_assets(ctx, work, source, target,
-                         ['pitch_index.txt', 'pitch_post.txt'])
-        log("기울기표 생성 완료")
+        for post_type in POST_TYPES:
+            state.posttype = post_type
+            state.info_path = info_file_map[post_type]
+            log(f"선로제표 생성 중: {post_type}")
+            runner = MainRunner(
+                state=state,
+                logger=log,
+                generator_type=post_type,
+            )
+            runner.run()
