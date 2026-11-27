@@ -16,6 +16,9 @@ from typing import Callable, Iterable, Sequence
 
 import pandas as pd
 
+from bveauto.core.alignment.curve.curvedata import CurveCollection, CurveDirection
+from bveauto.core.structure.structuredata import StructureCollection, StructureType
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -251,14 +254,6 @@ def load_curveinfo(path: str | Path) -> list[CurvePoint]:
     """곡선 파일을 읽어 CurvePoint 리스트로 반환."""
     return parsing_curveinfo(read_curve_csv(path))
 
-
-# ---------------------------------------------------------------------------
-# 기하 계산
-# ---------------------------------------------------------------------------
-def cal_direction(radius: float) -> int:
-    return -1 if radius < 0 else 1
-
-
 def cal_ordinate(radius: float, length: float, divisor: float) -> float:
     """원호 상 두 점의 종거 계산 (divisor로 분할점 지정)."""
     if radius == 0:
@@ -283,48 +278,55 @@ def cal_M2(ordinate1: float, ordinate2: float) -> float:
     return math.degrees((ordinate2 - ordinate1) / INCREMENT)
 
 
-def cal_X(direction: int, ordinate1: float, ordinate2: float) -> list[float]:
+def cal_X(direction: CurveDirection, ordinate1: float, ordinate2: float) -> list[float]:
     values = {
         "zero": 0.0,
-        "o1": ordinate1 if direction == -1 else -ordinate1,
-        "o2": ordinate2 if direction == -1 else -ordinate2,
+        "o1": ordinate1 if direction == CurveDirection.LEFT else -ordinate1,
+        "o2": ordinate2 if direction == CurveDirection.LEFT else -ordinate2,
     }
     return [values[X_PATTERN[i]] for i in range(INCREMENT)]
 
 
-def cal_Y(direction: int, m1: float, m2: float) -> list[float]:
+
+def cal_Y(direction: CurveDirection, m1: float, m2: float) -> list[float]:
+    sign = 1.0 if direction == CurveDirection.LEFT else -1.0
     values = {
         "zero": 0.0,
-        "m1": m1 if direction == -1 else -m1,
-        "m2": m2 if direction == -1 else -m2,
-        "m1_neg": -m1 if direction == -1 else m1,
-        "m2_neg": -m2 if direction == -1 else m2,
+        "m1": m1 * sign,
+        "m2": m2 * sign,
+        "m1_neg": -m1 * sign,
+        "m2_neg": -m2 * sign,
     }
     return [values[Y_PATTERN[i]] for i in range(INCREMENT)]
+
 
 
 # ---------------------------------------------------------------------------
 # 캔트 보간
 # ---------------------------------------------------------------------------
-def _classify_curvetype(current_r: float, next_r: float, direction_sign: int) -> str:
-    """곡선 유형 판단 (direction_sign: +1 우향, -1 좌향)."""
-    if direction_sign > 0:
+def _classify_curvetype(
+    current_r: float, next_r: float, direction: CurveDirection
+) -> str:
+    """곡선 유형 판단 (SP-PC: 완화곡선 진입, CP-PS: 완화곡선 진출)."""
+    if direction == CurveDirection.RIGHT:
         if current_r > next_r and next_r != 0:
             return "SP-PC"
         return "CP-PS"
+
     if current_r < next_r and next_r != 0:
         return "SP-PC"
     return "CP-PS"
 
 
+
 def cal_cant_5m(
-    c_list: Sequence[CurvePoint], sta: float, direction_sign: int
+    c_list: CurveCollection, sta: float, direction_sign: int
 ) -> float:
     """sta 위치에서의 5m 캔트 증분 (mm) 반환."""
     eps = 1e-6
     for i in range(len(c_list) - 1):
         cur, nxt = c_list[i], c_list[i + 1]
-        if abs(cur.sta - sta) < eps:
+        if abs(cur.station - sta) < eps:
             cant_difference = abs(nxt.cant - cur.cant)
             cant_increment = cant_difference / INCREMENT
             curvetype = _classify_curvetype(cur.radius, nxt.radius, direction_sign)
@@ -344,12 +346,12 @@ def cal_Z(first_cant: float, cant_increment: float) -> list[float]:
 # ---------------------------------------------------------------------------
 # 메인 계산 및 구문 생성
 # ---------------------------------------------------------------------------
-def cal_mainlogic(curveinfo: Sequence[CurvePoint]) -> list[FreeObjPoint]:
+def cal_mainlogic(curveinfo: CurveCollection) -> list[FreeObjPoint]:
     """곡선 정보로부터 5m 간격 FreeObj 좌표/각도 리스트를 계산."""
     freeobj: list[FreeObjPoint] = []
     for info in curveinfo:
         radius = info.radius
-        direction = cal_direction(radius)
+        direction = info.direction
 
         if radius != 0:
             ia = BLOCK_LENGTH / radius
@@ -364,13 +366,13 @@ def cal_mainlogic(curveinfo: Sequence[CurvePoint]) -> list[FreeObjPoint]:
             xs = [0.0] * INCREMENT
             ys = [0.0] * INCREMENT
 
-        cant_increment = cal_cant_5m(curveinfo, info.sta, direction)
+        cant_increment = cal_cant_5m(curveinfo, info.station, direction)
         zs = cal_Z(info.cant, cant_increment)
 
         for i in range(INCREMENT):
             freeobj.append(
                 FreeObjPoint(
-                    sta=info.sta + i * INCREMENT,
+                    sta=info.station + i * INCREMENT,
                     x=xs[i],
                     y=ys[i],
                     z=zs[i],
@@ -379,46 +381,28 @@ def cal_mainlogic(curveinfo: Sequence[CurvePoint]) -> list[FreeObjPoint]:
     return freeobj
 
 
-def isbridge_tunnel(sta: float, structure_data: StructureData) -> str:
-    """측점(sta)이 교량/터널/토공 중 어디에 속하는지 판정."""
-    for seg in structure_data.bridge:
-        if seg.start <= sta <= seg.end:
-            return STRUCTURE_BRIDGE
-    for seg in structure_data.tunnel:
-        if seg.start <= sta <= seg.end:
-            return STRUCTURE_TUNNEL
-    return STRUCTURE_EARTHWORK
-
-
-def check_sta_is_curve(current_sta: float, curveinfo: Sequence[CurvePoint]) -> str:
-    """측점(current_sta)이 곡선/직선 구간인지 판정."""
-    for i in range(len(curveinfo) - 1):
-        cur, nxt = curveinfo[i], curveinfo[i + 1]
-        if cur.sta <= current_sta < nxt.sta:
-            return CURVE if cur.radius != 0 else STRAIGHT
-    if curveinfo:
-        last = curveinfo[-1]
-        return CURVE if last.radius != 0 else STRAIGHT
-    return STRAIGHT
-
-
 def create_freeobj(
     freeobj: Sequence[FreeObjPoint],
-    structure_data: StructureData,
-    curve_info: Sequence[CurvePoint],
+    structure_data: StructureCollection,
+    curve_info: CurveCollection,
     index_dict: dict,
 ) -> list[str]:
     """FreeObj BVE 구문 리스트 생성."""
     content: list[str] = []
     for pt in freeobj:
-        structure = isbridge_tunnel(pt.sta, structure_data)
-        curve_type = check_sta_is_curve(pt.sta, curve_info)
+        struct = structure_data.find_by_station(pt.sta)
+        # 25m 블록 내 5m 점들도 곡선으로 인식하려면 floor(pt.sta / 25) * 25 등으로 블록 기준점 조회 권장
+        block_sta = (pt.sta // BLOCK_LENGTH) * BLOCK_LENGTH
+        curve = curve_info.find_by_station(block_sta)
 
-        if curve_type == CURVE:
-            if structure == STRUCTURE_TUNNEL:
+        is_curve = curve is not None and curve.direction != CurveDirection.TANGENT
+        if is_curve:
+            if struct and struct.structure_type == StructureType.TUNNEL:
                 idx = index_dict["freeobj"][CURVE][STRUCTURE_TUNNEL][TRACK_CONCRETE]
+            elif struct and struct.structure_type == StructureType.BRIDGE:
+                idx = index_dict["freeobj"][CURVE][STRUCTURE_BRIDGE][TRACK_BALLAST]
             else:
-                idx = index_dict["freeobj"][CURVE][structure][TRACK_BALLAST]
+                idx = index_dict["freeobj"][CURVE][STRUCTURE_EARTHWORK][TRACK_BALLAST]
         else:
             idx = index_dict["freeobj"][STRAIGHT]
 
@@ -427,24 +411,33 @@ def create_freeobj(
 
 
 def create_railtype(
-    curveinfo: Sequence[CurvePoint],
-    structure_data: StructureData,
+    curveinfo: CurveCollection,
+    structure_data: StructureCollection,
     index_dict: dict,
 ) -> list[str]:
     """RailType BVE 구문 리스트 생성."""
     railtype_list: list[str] = []
     for info in curveinfo:
-        structure = isbridge_tunnel(info.sta, structure_data)
-        if info.radius == 0:
-            if structure == STRUCTURE_TUNNEL:
-                railtype = index_dict["railtype"][STRAIGHT][STRUCTURE_TUNNEL][TRACK_CONCRETE]
+        struct = structure_data.find_by_station(info.station)
+        if struct is not None:
+            if struct.structure_type == StructureType.TUNNEL:
+                struct_key = STRUCTURE_TUNNEL
+            elif struct.structure_type == StructureType.BRIDGE:
+                struct_key = STRUCTURE_BRIDGE
             else:
-                # 교량/토공 각각 자신의 인덱스를 참조하도록 수정
-                railtype = index_dict["railtype"][STRAIGHT][structure][TRACK_BALLAST]
+                struct_key = STRUCTURE_EARTHWORK
+        else:
+            struct_key = STRUCTURE_EARTHWORK
+
+        if info.direction == CurveDirection.TANGENT:  # 직선
+            track_key = TRACK_CONCRETE if struct_key == STRUCTURE_TUNNEL else TRACK_BALLAST
+            railtype = index_dict["railtype"][STRAIGHT][struct_key][track_key]
         else:
             railtype = index_dict["railtype"][CURVE]
-        railtype_list.append(f"{info.sta},.railtype 0;{railtype};\n")
+
+        railtype_list.append(f"{info.station},.railtype 0;{railtype};\n")
     return railtype_list
+
 
 
 def modify_content(contents: Sequence[str]) -> list[str]:
@@ -467,8 +460,8 @@ def modify_content(contents: Sequence[str]) -> list[str]:
 # 외부 프로젝트용 통합 실행 API (메모리 기반 / 파일 기반)
 # ---------------------------------------------------------------------------
 def generate_bve_texts(
-    curveinfo: Sequence[CurvePoint],
-    structure_data: StructureData,
+    curveinfo: CurveCollection,
+    structure_data: StructureCollection,
     index_dict: dict | None = None,
     alignment_type: str = "도시철도",
     filter_zero_offsets: bool = True,
