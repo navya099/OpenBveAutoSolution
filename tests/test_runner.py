@@ -53,5 +53,5 @@ def test_default_pipeline_integration():
     runner = SolutionRunner(pipeline=pipeline, log=logs.append)
 
     runner.configure(150, 1)
-    # runner.run_step("#0. 기본 정보 로드")
+    runner.run_step("#0. 기본 정보 로드")
     # runner.run_all()
